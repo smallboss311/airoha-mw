@@ -52,6 +52,18 @@
 
 /* MACRO FUNCTION DECLARATIONS
 */
+
+#ifndef MQTT_EASY_DUMP
+
+#define mqttd_debug      printf
+
+#define mqttd_debug_pkt      printf
+
+#define mqttd_debug_db      printf
+
+
+#else
+
 #define mqttd_debug(fmt, ...)  do { \
                                 if (mqttd_debug_level == MQTTD_DEBUG_ALL) { \
                                 osapi_printf("<%s:%d>(%s)" fmt "\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__ ); \
@@ -67,6 +79,7 @@
                                 osapi_printf("(%s)" fmt "\n", __func__, ##__VA_ARGS__ ); \
                                 }} while (0)
 
+#endif
 
 typedef enum
 {
@@ -203,5 +216,9 @@ mqttd_shutdown(
 UI8_T
 mqttd_get_state(
     void);
+
+void *mqtt_malloc(UI32_T size);
+void mqtt_free(void *ptr);
+void *mqtt_realloc(void *ptr, UI32_T size);
 
 #endif  /*_MQTTD_H_*/
