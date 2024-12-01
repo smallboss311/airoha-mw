@@ -129,7 +129,7 @@ const C8_T cloud_hostname[] = "swmgr.hruicloud.com";
 //#define MQTTD_TOPIC_DB              MQTTD_TOPIC_PREFIX "/db"
 //#define MQTTD_TOPIC_INIT            MQTTD_TOPIC_DB "/init"
 //#define MQTTD_TOPIC_DBRC            MQTTD_TOPIC_DB "/rc"
-#define MQTTD_REQUEST_QOS           (0)
+#define MQTTD_REQUEST_QOS           (1) //TODO:0
 #define MQTTD_REQUEST_RETAIN        (0)
 //Cloud message
 //#define MQTTD_CLOUD_TODB            "mwcloud/db"
@@ -1206,7 +1206,7 @@ _mqttd_listen_db(
         return;
     }
 
-    mqttd_debug_db("get ptr_msg =%p", ptr_msg);
+    //mqttd_debug_db("get ptr_msg =%p", ptr_msg);
     if (M_B_RESPONSE == (ptr_msg->method & M_B_RESPONSE))
     {
         mqttd_debug_db("free the response meesage: ptr_msg =%p", ptr_msg);
@@ -1816,6 +1816,62 @@ static void _mqttd_incoming_publish_cb(void *arg, const char *topic, u32_t tot_l
     osapi_strncpy(ptr_mqttd->pub_in_topic, topic, (MQTTD_MAX_TOPIC_SIZE-1));
 }
 
+static MW_ERROR_NO_T _mqttd_handle_setconfig_response(MQTTD_CTRL_T *mqttdctl)
+{
+    MW_ERROR_NO_T rc = MW_E_OK;
+    cJSON *root = NULL;
+    char *original_payload = NULL;
+
+    mqttd_debug("setconfig response send...");
+
+    //create rx json
+    // 创建一个新的 JSON 对象
+    root = cJSON_CreateObject();
+
+    // 添加键值对到 JSON 对象
+    cJSON_AddStringToObject(root, "type", "setConfig");
+    cJSON_AddStringToObject(root, "msg_id", "20001");
+    cJSON_AddStringToObject(root, "result", "ok");
+
+    // 将 JSON 对象转换为字符串
+    original_payload = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    root = NULL;
+
+    // 打印 JSON 字符串
+    mqttd_debug("Publish RX Topic Message: %s\n", original_payload);
+
+   /* PUBLISH capability with rx topic */
+    char topic[128];
+    osapi_snprintf(topic, sizeof(topic), "%s/rx", mqttdctl->topic_prefix);
+    int original_payloadlen = strlen(original_payload)+1;    
+    if(original_payloadlen > MQTTD_MAX_PACKET_SIZE)
+    {
+        mqttd_debug("Original payload length is too long:%d.", original_payloadlen);
+        goto local_error;
+    }    
+    osapi_memset(mqttdctl->mqtt_buff, 0, MQTTD_MQX_OUTPUT_SIZE);
+    mqttd_rc4_encrypt((unsigned char *)original_payload, original_payloadlen, MQTTD_RC4_KEY, mqttdctl->mqtt_buff);
+    mqtt_publish(mqttdctl->ptr_client, topic, (const void *)mqttdctl->mqtt_buff, original_payloadlen, MQTTD_REQUEST_QOS, MQTTD_REQUEST_RETAIN, _mqttd_publish_cb, (void *)mqttdctl);
+
+    // 释放内存
+    cJSON_free(original_payload); 
+    original_payload= NULL;  
+    return rc;
+
+local_error:
+    if(root) {
+        cJSON_Delete(root);
+        root = NULL;
+    }
+    if(original_payload){
+        cJSON_free(original_payload);     
+        original_payload = NULL;  
+    }
+
+    return MW_E_NO_MEMORY;
+}
+
 static MW_ERROR_NO_T _mqttd_handle_setconfig_device(MQTTD_CTRL_T *mqttdctl, cJSON *data_obj)
 {
     MW_ERROR_NO_T rc = MW_E_OK;
@@ -2369,6 +2425,12 @@ static MW_ERROR_NO_T _mqttd_handle_setconfig_data(MQTTD_CTRL_T *mqttdctl,  cJSON
         }
     }
 
+    //send mqtt setconfig rx message
+    rc = _mqttd_handle_setconfig_response(mqttdctl);
+    if(MW_E_OK != rc){
+        mqttd_debug("Handling setConfig response failed.");
+    }
+
 	return rc;
 }
 static MW_ERROR_NO_T _mqttd_handle_capability(MQTTD_CTRL_T *mqttdctl,  cJSON *msgid_obj)
@@ -2803,7 +2865,10 @@ static MW_ERROR_NO_T  _mqttd_handle_reset(MQTTD_CTRL_T *mqttdctl,  cJSON *data_o
     
     osapi_memset(mqttdctl->mqtt_buff, 0, MQTTD_MQX_OUTPUT_SIZE);
     mqttd_rc4_encrypt((unsigned char *)original_payload, original_payloadlen, MQTTD_RC4_KEY, mqttdctl->mqtt_buff);
-    mqtt_publish(mqttdctl->ptr_client, topic, (const void *)mqttdctl->mqtt_buff, original_payloadlen, MQTTD_REQUEST_QOS, MQTTD_REQUEST_RETAIN, _mqttd_publish_cb, (void *)mqttdctl);
+    rc = mqtt_publish(mqttdctl->ptr_client, topic, (const void *)mqttdctl->mqtt_buff, original_payloadlen, MQTTD_REQUEST_QOS, MQTTD_REQUEST_RETAIN, _mqttd_publish_cb, (void *)mqttdctl);
+    if(MW_E_OK != rc){
+        mqttd_debug("Publish reset failed.");
+    }
 
     // 释放内存
     cJSON_free(original_payload); 
