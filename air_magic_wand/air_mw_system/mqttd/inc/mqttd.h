@@ -90,6 +90,15 @@ typedef enum
     MQTTD_DEBUG_LAST
 } MQTTD_DEBUG_LEVEL_T;
 
+typedef enum
+{
+    MQTTD_ACCESS_VLAN = 1,
+    MQTTD_TRUNK_VLAN = 2,
+    MQTTD_HYBRID_VLAN = 3,
+    MQTTD_TNUNEL_VLAN = 4,
+    MQTTD_CFG_VLAN_LAST
+} MQTTD_CFG_VLAN_E;
+
 /* DATA TYPE DECLARATIONS
 */
 UI8_T mqttd_debug_level;
