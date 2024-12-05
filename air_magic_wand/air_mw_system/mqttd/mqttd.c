@@ -1529,7 +1529,83 @@ static MW_ERROR_NO_T _mqttd_publish_portcfg(MQTTD_CTRL_T *ptr_mqttd,  const DB_R
             cJSON_AddStringToObject(port_setting_entry, "sp", "1000");
         cJSON_AddNumberToObject(port_setting_entry, "du", ptr_port_cfg_info->admin_duplex);
         cJSON_AddNumberToObject(port_setting_entry, "fc_p", ptr_port_cfg_info->admin_flow_ctrl);
+        cJSON_AddNumberToObject(port_setting_entry, "nv", ptr_port_cfg_info->pvid);
+        cJSON_AddNumberToObject(port_setting_entry, "vlanlist", ptr_port_cfg_info->vlan_list);
         cJSON_AddNumberToObject(port_setting_entry, "EEE", ptr_port_cfg_info->eee_enable);
+
+        osapi_printf("vlan %d, vlan list %x", ptr_port_cfg_info->pvid, ptr_port_cfg_info->vlan_list);
+
+	    char *original_payload = cJSON_PrintUnformatted(root);
+	    cJSON_Delete(root);
+		mqtt_free(db_msg);
+
+	    if (original_payload == NULL) {
+	        osapi_printf("Failed to print JSON\n");
+	        return MW_E_NO_MEMORY;
+	    }
+		osapi_printf("portcfg: payload:%s\n", original_payload);
+
+		int original_payloadlen = strlen(original_payload);
+		// Encrypt the payload using RC4
+    	mqttd_rc4_encrypt((unsigned char *)original_payload, original_payloadlen, MQTTD_RC4_KEY, ptr_mqttd->mqtt_buff);
+        mqtt_publish(ptr_mqttd->ptr_client, topic, (const void *)ptr_mqttd->mqtt_buff, original_payloadlen, MQTTD_REQUEST_QOS, MQTTD_REQUEST_RETAIN, _mqttd_publish_cb, (void *)ptr_mqttd);
+		mqtt_free(original_payload); // Free the JSON payload
+        
+        osapi_printf("\nMQTT subscribe event topic with port config done.\n");
+    }
+	return rc;
+}
+
+static MW_ERROR_NO_T _mqttd_publish_vlancfg(MQTTD_CTRL_T *ptr_mqttd,  const DB_REQUEST_TYPE_T *req, const void *ptr_data)
+{
+	MW_ERROR_NO_T rc = MW_E_OK;
+    DB_MSG_T *db_msg = NULL;
+    UI16_T db_size = 0;
+    void *db_data = NULL;
+    DB_PORT_CFG_INFO_T *ptr_port_cfg_info = NULL;
+	osapi_printf("publish portcfg: T/F/E =%u/%u/%u\n", req->t_idx, req->f_idx, req->e_idx);
+	
+    rc = mqttd_queue_getData(PORT_CFG_INFO, DB_ALL_FIELDS, req->e_idx, &db_msg, &db_size, &db_data);
+    if(MW_E_OK == rc)
+    {
+        /* If SUBACK received, then PUBLISH online event */
+        char topic[128];
+        osapi_snprintf(topic, sizeof(topic), "%s/event", ptr_mqttd->topic_prefix);
+        ptr_port_cfg_info = (DB_PORT_CFG_INFO_T *)db_data;
+        osapi_printf("portcfg: db_size:%d\n", db_size);
+        cJSON *root = cJSON_CreateObject();
+        cJSON *data = cJSON_CreateObject();
+        cJSON *port_setting = cJSON_CreateObject();
+        cJSON *port_setting_entry = cJSON_CreateObject();
+        if (root == NULL || data == NULL || port_setting == NULL || port_setting_entry == NULL) {
+            mqttd_debug("Failed to create JSON objects\n");
+            if (root != NULL) cJSON_Delete(root);
+            if (data != NULL) cJSON_Delete(data);
+            if (port_setting != NULL) cJSON_Delete(port_setting);
+            if (port_setting_entry != NULL) cJSON_Delete(port_setting_entry);
+            return MW_E_NO_MEMORY;
+        }
+
+	    cJSON_AddStringToObject(root, "type", "config");
+	    cJSON_AddItemToObject(root, "data", data);
+        cJSON_AddItemToObject(data, "port_setting", port_setting);
+        cJSON_AddItemToArray(port_setting, port_setting_entry);
+        cJSON_AddNumberToObject(port_setting_entry, "id", req->e_idx);
+        cJSON_AddStringToObject(port_setting_entry, "n", "");
+        cJSON_AddNumberToObject(port_setting_entry, "en", ptr_port_cfg_info->admin_status);
+        if(AIR_PORT_SPEED_10M == ptr_port_cfg_info->admin_speed)
+            cJSON_AddStringToObject(port_setting_entry, "sp", "10");
+        else if(AIR_PORT_SPEED_100M == ptr_port_cfg_info->admin_speed)
+            cJSON_AddStringToObject(port_setting_entry, "sp", "100");
+        else if(AIR_PORT_SPEED_1000M == ptr_port_cfg_info->admin_speed)
+            cJSON_AddStringToObject(port_setting_entry, "sp", "1000");
+        cJSON_AddNumberToObject(port_setting_entry, "du", ptr_port_cfg_info->admin_duplex);
+        cJSON_AddNumberToObject(port_setting_entry, "fc_p", ptr_port_cfg_info->admin_flow_ctrl);
+        cJSON_AddNumberToObject(port_setting_entry, "nv", ptr_port_cfg_info->pvid);
+        cJSON_AddNumberToObject(port_setting_entry, "vlanlist", ptr_port_cfg_info->vlan_list);
+        cJSON_AddNumberToObject(port_setting_entry, "EEE", ptr_port_cfg_info->eee_enable);
+
+        osapi_printf("vlan %d, vlan list %x", ptr_port_cfg_info->pvid, ptr_port_cfg_info->vlan_list);
 
 	    char *original_payload = cJSON_PrintUnformatted(root);
 	    cJSON_Delete(root);
@@ -1927,6 +2003,10 @@ _mqttd_listen_db(
 						(void)_mqttd_publish_portcfg(ptr_mqttd, &req, ptr_data);
                         break;
                     case LOGON_INFO:/*not support*/
+                        break;
+
+                    case VLAN_ENTRY:
+                        (void)_mqttd_publish_vlancfg(ptr_mqttd, &req, ptr_data);
                         break;
 						
                     case PORT_MIRROR_INFO:
@@ -4541,13 +4621,20 @@ static MW_ERROR_NO_T _mqttd_handle_getconfig_vlan_member(MQTTD_CTRL_T *mqttdctl,
     //更新vlan配置
     for(i = 0; i < MAX_VLAN_ENTRY_NUM; i++)
     {
+        mqttd_debug("vlan_id:%d  %x %x %x \n", ptr_vlan_entry_tbl->vlan_id[i], ptr_vlan_entry_tbl->port_member[i], ptr_vlan_entry_tbl->tagged_member[i], ptr_vlan_entry_tbl->untagged_member[i]);
         if(ptr_vlan_entry_tbl[i].vlan_id == 0) {
             continue;
         }
         // 创建第一个对象并添加到数组
         cJSON *member1 = cJSON_CreateObject();
         cJSON_AddNumberToObject(member1, "id", (double)ptr_vlan_entry_tbl->vlan_id[i]);
-        cJSON_AddItemToArray(vlan_member, member1);
+        if(false == cJSON_AddItemToArray(vlan_member, member1)){
+            mqttd_debug("Failed to add vlan member to array.");
+            cJSON_Delete(member1);
+            cJSON_Delete(vlan_member);
+            MW_FREE(ptr_msg);
+            return MW_E_NO_MEMORY;
+        }
     }
 
     cJSON_AddItemToObject(data_obj, "vlan_member", vlan_member);
@@ -4682,6 +4769,7 @@ static MW_ERROR_NO_T _mqttd_handle_getconfig_data(MQTTD_CTRL_T *mqttdctl,  cJSON
     {
         cJSON_AddItemToObject(root, "data", data);
 	    original_payload = cJSON_PrintUnformatted(root);
+        mqttd_debug("Original payload: %s.", original_payload);
         if (original_payload == NULL) {
             osapi_printf("Failed to print getconf JSON\n");
             cJSON_Delete(root);

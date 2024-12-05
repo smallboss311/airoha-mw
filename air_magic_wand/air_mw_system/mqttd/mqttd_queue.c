@@ -420,7 +420,7 @@ mqttd_queue_getData(
     ptr_pload = (DB_PAYLOAD_T *)&(ptr_msg->ptr_payload);
     (*pptr_out_data) = &(ptr_pload->ptr_data);
 
-    mqttd_debug_db("*pptr_out_msg = %p, *pptr_out_data = %p \n", *pptr_out_msg, *pptr_out_data);
+    //mqttd_debug_db("*pptr_out_msg = %p, *pptr_out_data = %p \n", *pptr_out_msg, *pptr_out_data);
 
     return MW_E_OK;
 }
