@@ -4160,7 +4160,7 @@ static MW_ERROR_NO_T _mqttd_handle_getconfig_jumbo_frame(MQTTD_CTRL_T *mqttdctl,
 	return rc;
 }
 
-static MW_ERROR_NO_T _mqttd_handle_getconfig_vlan_set(MQTTD_CTRL_T *mqttdctl, cJSON *data_obj)
+static MW_ERROR_NO_T _mqttd_handle_getconfig_vlan_setting(MQTTD_CTRL_T *mqttdctl, cJSON *data_obj)
 {
     MW_ERROR_NO_T rc = MW_E_OK;
 	DB_VLAN_ENTRY_T *ptr_vlan_entry_tbl = NULL;
@@ -4490,8 +4490,19 @@ static MW_ERROR_NO_T _mqttd_handle_getconfig_data(MQTTD_CTRL_T *mqttdctl,  cJSON
                 // Handle "filter_mac" case
             } else if (osapi_strcmp(child->valuestring, "vlan_member") == 0) {
                 // Handle "vlan_member" case
+                rc = _mqttd_handle_getconfig_vlan_member(mqttdctl, data);
+                if(MW_E_OK != rc){
+                    mqttd_debug("Handling getConfig vlan_member failed.");
+                    break;
+                }
             } else if (osapi_strcmp(child->valuestring, "vlan_setting") == 0) {
                 // Handle "vlan_setting" case
+                rc = _mqttd_handle_getconfig_vlan_setting(mqttdctl, data);
+                if(MW_E_OK != rc){
+                    mqttd_debug("Handling getConfig vlan_setting failed.");
+                    break;
+                }
+
             } else if (osapi_strcmp(child->valuestring, "port_limit_rate") == 0) {
                 // Handle "port_limit_rate" case
             } else if (osapi_strcmp(child->valuestring, "storm_control") == 0) {
