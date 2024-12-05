@@ -272,15 +272,15 @@ mqttd_queue_send(
 
     /* message */
     dbapi_setMsgHeader(ptr_msg, MQTTD_QUEUE_NAME, method, 1);
-    mqttd_debug_db("method=0x%X", ptr_msg ->method);
+    //mqttd_debug_db("method=0x%X", ptr_msg ->method);
 
     /* payload */
     ptr_payload = (DB_PAYLOAD_T *)&(ptr_msg ->ptr_payload);
     dbapi_setMsgPayload(method, t_idx, f_idx, e_idx, ptr_data, (void *)ptr_payload);
-    mqttd_debug_db("T/F/E=%u/%u/%u", ptr_payload ->request.t_idx,
+    /*mqttd_debug_db("T/F/E=%u/%u/%u", ptr_payload ->request.t_idx,
                                     ptr_payload ->request.f_idx,
                                     ptr_payload ->request.e_idx);
-    mqttd_debug_db("data_size=%u", ptr_payload ->data_size);
+    mqttd_debug_db("data_size=%u", ptr_payload ->data_size);*/
 
     /* Send message to DB */
 
@@ -405,7 +405,7 @@ mqttd_queue_getData(
     rc = mqttd_queue_recv((void **)&ptr_msg);
     if(MW_E_OK == rc)
     {
-        mqttd_debug_db("mqttd_queue_recv success \n");
+        //mqttd_debug_db("mqttd_queue_recv success \n");
     }
     else
     {
