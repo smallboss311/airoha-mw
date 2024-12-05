@@ -4922,7 +4922,7 @@ static MW_ERROR_NO_T  _mqttd_handle_reboot(MQTTD_CTRL_T *mqttdctl,  cJSON *data_
 
     //create rx json
     // 创建一个新的 JSON 对象
-    cJSON *root = cJSON_CreateObject();
+    root = cJSON_CreateObject();
 
     // 添加键值对到 JSON 对象
     cJSON_AddStringToObject(root, "type", "reboot");
