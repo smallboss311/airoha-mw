@@ -64,6 +64,9 @@ static MW_ERROR_NO_T _mqttd_cmd_enable(const C8_T *tokens[], UI32_T token_idx);
 static MW_ERROR_NO_T _mqttd_cmd_dump_topic(const C8_T *tokens[], UI32_T token_idx);
 static MW_ERROR_NO_T _mqttd_cmd_debug(const C8_T *tokens[], UI32_T token_idx);
 static MW_ERROR_NO_T _mqttd_cmd_show_state(const C8_T *tokens[], UI32_T token_idx);
+static MW_ERROR_NO_T _mqttd_cmd_coding(const C8_T *tokens[], UI32_T token_idx);
+static MW_ERROR_NO_T _mqttd_cmd_json(const C8_T *tokens[], UI32_T token_idx);
+
 
 
 /* GLOBAL VARIABLE DECLARATIONS
@@ -85,7 +88,15 @@ static MW_CMD_VEC_T _mw_mqttd_cmd_vec[] =
     {
         "show", 1, _mqttd_cmd_show_state,
         "mqttd show state\n"
-    }
+    },
+    {
+        "encode", 1, _mqttd_cmd_coding,
+        "mqttd encode { enable | disable }\n"
+    },
+    {
+        "json", 1, _mqttd_cmd_json,
+        "mqttd json { enable | disable }\n"
+    },
 };
 
 /* STATIC VARIABLE DECLARATIONS
@@ -142,6 +153,84 @@ _mqttd_cmd_enable(
         return MW_E_BAD_PARAMETER;
     }
     sys_mgmt_mqttd_enable_cmd_set(enable, (void *)&value);
+
+    return ret;
+}
+
+/* STATIC VARIABLE DECLARATIONS
+ */
+
+/* LOCAL SUBPROGRAM BODIES
+ */
+/* cmd: mqttd encode { enable | disable }
+*/
+static MW_ERROR_NO_T
+_mqttd_cmd_coding(
+    const C8_T *tokens[],
+    UI32_T token_idx)
+{
+    MW_ERROR_NO_T ret = MW_E_OK;
+    UI8_T enable;
+
+    /* Parser tokens */
+    if(MW_E_OK == mw_cmd_checkString(tokens[token_idx], "enable"))
+    {
+        token_idx++;
+        MW_CMD_CHECK_LAST_TOKEN(tokens[token_idx]);
+        enable = 1;
+        osapi_printf("Enable the MQTT coding\n");
+    }
+    else if(MW_E_OK == mw_cmd_checkString(tokens[token_idx], "disable"))
+    {
+        token_idx++;
+        MW_CMD_CHECK_LAST_TOKEN(tokens[token_idx]);
+        enable = 0;
+        osapi_printf("Disable the MQTT coding\n");
+    }
+    else
+    {
+        return MW_E_BAD_PARAMETER;
+    }
+    sys_mgmt_mqttd_enable_coding(enable);
+
+    return ret;
+}
+
+/* STATIC VARIABLE DECLARATIONS
+ */
+
+/* LOCAL SUBPROGRAM BODIES
+ */
+/* cmd: mqttd json { enable | disable }
+*/
+static MW_ERROR_NO_T
+_mqttd_cmd_json(
+    const C8_T *tokens[],
+    UI32_T token_idx)
+{
+    MW_ERROR_NO_T ret = MW_E_OK;
+    UI8_T enable;
+
+    /* Parser tokens */
+    if(MW_E_OK == mw_cmd_checkString(tokens[token_idx], "enable"))
+    {
+        token_idx++;
+        MW_CMD_CHECK_LAST_TOKEN(tokens[token_idx]);
+        enable = 1;
+        osapi_printf("Enable the MQTT coding\n");
+    }
+    else if(MW_E_OK == mw_cmd_checkString(tokens[token_idx], "disable"))
+    {
+        token_idx++;
+        MW_CMD_CHECK_LAST_TOKEN(tokens[token_idx]);
+        enable = 0;
+        osapi_printf("Disable the MQTT coding\n");
+    }
+    else
+    {
+        return MW_E_BAD_PARAMETER;
+    }
+    sys_mgmt_mqttd_enable_json(enable);
 
     return ret;
 }
