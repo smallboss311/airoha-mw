@@ -183,7 +183,7 @@ mqttd_queue_recv(
         return rc;
     }
 
-    mqttd_debug_db("ptr_msg=%p", ptr_msg);
+    //mqttd_debug_db("ptr_msg=%p", ptr_msg);
     (*ptr_buf) = ptr_msg;
 
     return MW_E_OK;
