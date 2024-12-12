@@ -2947,6 +2947,9 @@ static MW_ERROR_NO_T _mqttd_handle_setconfig_vlan_member(MQTTD_CTRL_T *mqttdctl,
 	                    for (i = 0; i < MAX_VLAN_ENTRY_NUM; i++) {
 	                        if ((vlan_info.vlan_id[i] == 0) || (vlan_info.vlan_id[i] == i)) { // Assuming 0 means empty entry
 	                            vlan_info.vlan_id[i] = vid;
+                                vlan_info.port_member[i] = 0;
+                                vlan_info.tagged_member[i] = 0;
+                                vlan_info.untagged_member[i] = 0;
 	                            // Initialize other fields of vlan_entry if needed
 	                            break;
 	                        }
