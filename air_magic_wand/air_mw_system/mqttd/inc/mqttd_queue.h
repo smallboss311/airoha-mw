@@ -50,7 +50,8 @@
 /* NAMING CONSTANT DECLARATIONS
 */
 #define MQTTD_QUEUE_NAME            "mqd"
-#define MQTTD_QUEUE_LEN             (28)
+#define MQTTD_GET_QUEUE_NAME        "mqg"
+#define MQTTD_QUEUE_LEN             (18)
 #define MQTTD_QUEUE_BLOCKTIMEOUT    (0xFFFFFFFF)
 #define MQTTD_QUEUE_TIMEOUT         (100)
 #define MQTTD_ACCEPTMBOX_SIZE       (4)
