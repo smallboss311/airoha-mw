@@ -255,6 +255,16 @@ typedef struct MQTTD_CTRL_S
 	UI8_T 			json_buff[MQTTD_MQX_OUTPUT_SIZE*MQTTD_MAX_CHUNK_NUM+5];
 } ATTRIBUTE_PACK MQTTD_CTRL_T;
 
+/* The port mirror information table */
+typedef struct ONE_DB_PORT_MIRROR_INFO_S
+{
+    UI8_T           enable;      /* The admin status of the port mirror session */
+    UI8_T           dest_port;   /* The destination port of the mirror session */
+    UI32_T          src_in_port; /* The ingress traffic of the source port */
+    UI32_T          src_eg_port; /* The egress traffic of the source port */
+} ATTRIBUTE_PACK ONE_DB_PORT_MIRROR_INFO_T;
+
+
 /* GLOBAL VARIABLE DECLARATIONS
 */
 UI8_T mqttd_enable;
@@ -1337,11 +1347,14 @@ _mqttd_subscribe_db(
         return rc;
     }
 
-    offset = dbapi_setMsgHeader(ptr_msg, MQTTD_QUEUE_NAME, M_SUBSCRIBE, TABLES_LAST);
+    offset = dbapi_setMsgHeader(ptr_msg, MQTTD_QUEUE_NAME, M_SUBSCRIBE, TABLES_LAST-1);
     ptr_data = (UI8_T *)ptr_msg;
     for (db_tidx = 0; db_tidx < TABLES_LAST; db_tidx++)
     {
-        /* message header */
+        /* message header */   
+        if(db_tidx == MIB_CNT)
+        	continue;
+        	
         offset += dbapi_setMsgPayload(M_SUBSCRIBE, db_tidx, DB_ALL_FIELDS, DB_ALL_ENTRIES, NULL, ptr_data + offset);
     }
 
@@ -1489,8 +1502,8 @@ static MW_ERROR_NO_T _mqttd_publish_portcfg(MQTTD_CTRL_T *ptr_mqttd,  const DB_R
     void *db_data = NULL;
     DB_PORT_CFG_INFO_T *ptr_port_cfg_info = NULL;
 	osapi_printf("publish portcfg: T/F/E =%u/%u/%u\n", req->t_idx, req->f_idx, req->e_idx);
-
-	if(req->f_idx == PORT_ADMIN_SPD_ABILITY || req->f_idx == PORT_MIRROR_ID)
+ 
+	if(req->f_idx != PORT_ADMIN_STATUS)
 		return MW_E_OK;
 	
     rc = mqttd_queue_getData(PORT_CFG_INFO, DB_ALL_FIELDS, req->e_idx, &db_msg, &db_size, &db_data);
@@ -1500,6 +1513,7 @@ static MW_ERROR_NO_T _mqttd_publish_portcfg(MQTTD_CTRL_T *ptr_mqttd,  const DB_R
         char topic[80];
         osapi_snprintf(topic, sizeof(topic), "%s/event", ptr_mqttd->topic_prefix);
         ptr_port_cfg_info = (DB_PORT_CFG_INFO_T *)db_data;
+#if 0     
         osapi_printf("Port Configuration Info (Port Index: %u):\n", req->e_idx);
         osapi_printf("Admin Status: %u\n", ptr_port_cfg_info->admin_status);
         osapi_printf("Admin Speed: %u\n", ptr_port_cfg_info->admin_speed);
@@ -1507,7 +1521,7 @@ static MW_ERROR_NO_T _mqttd_publish_portcfg(MQTTD_CTRL_T *ptr_mqttd,  const DB_R
         osapi_printf("Admin Flow Control: %u\n", ptr_port_cfg_info->admin_flow_ctrl);
         osapi_printf("Admin Speed Ability: %u\n", ptr_port_cfg_info->admin_spd_ability);
         osapi_printf("EEE Enable: %u\n", ptr_port_cfg_info->eee_enable);
-
+#endif
         cJSON *root = cJSON_CreateObject();
         cJSON *data = cJSON_CreateObject();
         cJSON *port_setting = cJSON_CreateObject();
@@ -1631,21 +1645,12 @@ static MW_ERROR_NO_T _mqttd_publish_jumbo_frame(MQTTD_CTRL_T *ptr_mqttd,  const 
 	cJSON_AddStringToObject(root, "type", "config");
 	cJSON_AddItemToObject(root, "data", data);
     cJSON_AddItemToObject(data, "jumbo_frame", jumbo_frame);
-	cJSON_AddNumberToObject(jumbo_frame, "mtu", jumbo_frame_info.cfg);
+	cJSON_AddNumberToObject(jumbo_frame, "mtu", jumbo_frame_info.cfg*1024);
 
 	mqtt_send_json_and_free(ptr_mqttd, topic, root);
 
 	return rc;
 }
-
-/* The port mirror information table */
-typedef struct ONE_DB_PORT_MIRROR_INFO_S
-{
-    UI8_T           enable;      /* The admin status of the port mirror session */
-    UI8_T           dest_port;   /* The destination port of the mirror session */
-    UI32_T          src_in_port; /* The ingress traffic of the source port */
-    UI32_T          src_eg_port; /* The egress traffic of the source port */
-} ATTRIBUTE_PACK ONE_DB_PORT_MIRROR_INFO_T;
 
 
 static MW_ERROR_NO_T _mqttd_publish_port_mirroring(MQTTD_CTRL_T *ptr_mqttd,  const DB_REQUEST_TYPE_T *req, const void *ptr_data)
@@ -1656,7 +1661,10 @@ static MW_ERROR_NO_T _mqttd_publish_port_mirroring(MQTTD_CTRL_T *ptr_mqttd,  con
     u16_t db_size = 0;
     void *db_data = NULL;
     int i = 0;
-	osapi_printf("publish port mirroring: T/F/E =%u/%u/%u\n", req->t_idx, req->f_idx, req->e_idx);
+    osapi_printf("publish port mirroring: T/F/E =%u/%u/%u\n", req->t_idx, req->f_idx, req->e_idx);
+    if(req->f_idx != DB_ALL_FIELDS)
+		return MW_E_OK;
+		
     memset(&port_mirror_info, 0, sizeof(DB_PORT_MIRROR_INFO_T));
     rc = mqttd_queue_getData(PORT_MIRROR_INFO, DB_ALL_FIELDS, req->e_idx, &ptr_db_msg, &db_size, &db_data);
     if(MW_E_OK != rc)
@@ -1667,12 +1675,12 @@ static MW_ERROR_NO_T _mqttd_publish_port_mirroring(MQTTD_CTRL_T *ptr_mqttd,  con
     memcpy(&port_mirror_info, db_data, sizeof(ONE_DB_PORT_MIRROR_INFO_T));
     mqtt_free(ptr_db_msg);
     
-    osapi_printf("Port Mirror Info:\n");
-    osapi_printf("Session %d:\n", req->e_idx);
-    osapi_printf("  Enable: %d\n", port_mirror_info.enable);
-    osapi_printf("  Source In Port: 0x%x\n", port_mirror_info.src_in_port);
-    osapi_printf("  Source Eg Port: 0x%x\n", port_mirror_info.src_eg_port);
-    osapi_printf("  Destination Port: %d\n", port_mirror_info.dest_port);
+    //osapi_printf("Port Mirror Info:\n");
+    //osapi_printf("Session %d:\n", req->e_idx);
+    //osapi_printf("  Enable: %d\n", port_mirror_info.enable);
+    //osapi_printf("  Source In Port: 0x%x\n", port_mirror_info.src_in_port);
+    //osapi_printf("  Source Eg Port: 0x%x\n", port_mirror_info.src_eg_port);
+    //osapi_printf("  Destination Port: %d\n", port_mirror_info.dest_port);
 
     char topic[80];
     osapi_snprintf(topic, sizeof(topic), "%s/event", ptr_mqttd->topic_prefix);
@@ -1682,35 +1690,28 @@ static MW_ERROR_NO_T _mqttd_publish_port_mirroring(MQTTD_CTRL_T *ptr_mqttd,  con
 	cJSON_AddStringToObject(root, "type", "config");
 	cJSON_AddItemToObject(root, "data", data);
     cJSON_AddItemToObject(data, "port_mirroring", json_port_mirror_info);
-
-    //blank entry
-    #if 0
-    if(port_mirror_info.enable == 0)
-        continue;
-    #endif
     
     cJSON *json_port_mirror_entry = cJSON_CreateObject();
     cJSON_AddNumberToObject(json_port_mirror_entry, "gid", req->e_idx);
     cJSON *json_src_in_ports = cJSON_CreateArray();
-    cJSON_AddItemToArray(json_src_in_ports, cJSON_CreateNumber(port_mirror_info.src_in_port));
+    cJSON *json_src_dir = cJSON_CreateArray();
+    for (i = 0; i < PLAT_MAX_PORT_NUM; i++) {
+        if (port_mirror_info.src_in_port & (1 << i) || port_mirror_info.src_eg_port & (1 << i)) {
+            cJSON_AddItemToArray(json_src_in_ports, cJSON_CreateNumber(i+1));
+            if(port_mirror_info.src_in_port & (1 << i) && port_mirror_info.src_eg_port & (1 << i))
+                cJSON_AddItemToArray(json_src_dir, cJSON_CreateNumber(3));
+            else if(port_mirror_info.src_in_port & (1 << i))
+                cJSON_AddItemToArray(json_src_dir, cJSON_CreateNumber(1));
+            else if(port_mirror_info.src_eg_port & (1 << i))
+                cJSON_AddItemToArray(json_src_dir, cJSON_CreateNumber(2));
+        }
+    }
     cJSON_AddItemToObject(json_port_mirror_entry, "sp", json_src_in_ports);
-    cJSON_AddNumberToObject(json_port_mirror_entry, "tp", port_mirror_info.src_eg_port);
-    if(port_mirror_info.src_in_port != 0 && port_mirror_info.src_eg_port != 0)
-    {
-        cJSON_AddNumberToObject(json_port_mirror_entry, "dir", 3);
-    }
-    else if(port_mirror_info.src_in_port != 0)
-    {
-        cJSON_AddNumberToObject(json_port_mirror_entry, "dir", 1);
-    }
-    else if(port_mirror_info.src_eg_port != 0)
-    {
-        cJSON_AddNumberToObject(json_port_mirror_entry, "dir", 2);
-    }
-    cJSON_AddItemToArray(json_port_mirror_info, json_port_mirror_entry);
- 
-  	mqtt_send_json_and_free(ptr_mqttd, topic, root);
+    cJSON_AddItemToObject(json_port_mirror_entry, "dir", json_src_dir);
+    cJSON_AddNumberToObject(json_port_mirror_entry, "tp", port_mirror_info.dest_port);
 
+    cJSON_AddItemToArray(json_port_mirror_info, json_port_mirror_entry);
+  	mqtt_send_json_and_free(ptr_mqttd, topic, root);
 	return rc;
 }
 
@@ -1746,7 +1747,7 @@ static MW_ERROR_NO_T _mqttd_publish_static_mac(MQTTD_CTRL_T *ptr_mqttd,  const D
     for (i = 0; i < MAX_STATIC_MAC_NUM; i++)
     {
         //blank entry
-        #if 0
+        #if 1
         if(static_mac_info.port[i] == 0)
             continue;
         #endif
@@ -1921,14 +1922,14 @@ _mqttd_listen_db(
         method = ptr_msg->method;
         //mqttd_debug_db("count =%d, method =%u", count, method);
 
-        if (M_UPDATE == method)
+        if (M_UPDATE == (method & M_UPDATE))
         {
             ptr_data = (UI8_T *)&(ptr_msg->ptr_payload);
             while (count > 0)
             {
                 memcpy((void *)&req, (const void *)ptr_data, sizeof(DB_REQUEST_TYPE_T));
                 ptr_data += sizeof(DB_REQUEST_TYPE_T);
-                //mqttd_debug_db("T/F/E =%u/%u/%u", req.t_idx, req.f_idx, req.e_idx);
+                ////osapi_printf("listen_db[%d]: T/F/E =%u/%u/%u\n", count, req.t_idx, req.f_idx, req.e_idx);
                 /* append db json data to PUBLISH request list */
                 memcpy((void *)&msg_size, (const void *)ptr_data, sizeof(UI16_T));
                 //mqttd_debug_db("data size =%u", msg_size);
@@ -5628,7 +5629,14 @@ MW_ERROR_NO_T mqttd_init(void *arg)
     {
         return MW_E_NOT_INITED;
     }
-	
+
+    /* mqttd internal DB get queue */
+    rc = mqttd_get_queue_init();
+    if (MW_E_OK != rc)
+    {
+        return MW_E_NOT_INITED;
+    }
+    
     /* mqttd remain message mutex */
     rc = osapi_mutexCreate(
             MQTTD_TASK_NAME,
@@ -5637,6 +5645,7 @@ MW_ERROR_NO_T mqttd_init(void *arg)
     {
         mqttd_debug("Failed to create remain message mutex");
         mqttd_queue_free();
+        mqttd_get_queue_free();
         return MW_E_NOT_INITED;
     }
     mqttd_debug("Create the remain msg mutex %p",ptr_mqttmutex);
@@ -5653,6 +5662,7 @@ MW_ERROR_NO_T mqttd_init(void *arg)
     {
         mqttd_debug("Failed to create MQTTD timer.");
         mqttd_queue_free();
+        mqttd_get_queue_free();
         osapi_mutexDelete(ptr_mqttmutex);
         return MW_E_NOT_INITED;
     }
@@ -5670,6 +5680,7 @@ MW_ERROR_NO_T mqttd_init(void *arg)
     {
         mqttd_debug("Delete the remain message mutex and process mutex due to process create failed");
         mqttd_queue_free();
+        mqttd_get_queue_free();
         osapi_mutexDelete(ptr_mqttmutex);
         osapi_timerDelete(ptr_mqttd_time);
         return MW_E_NOT_INITED;
